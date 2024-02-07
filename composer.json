@@ -1,0 +1,36 @@
+{
+    "name": "ajur-media/kcaptcha",
+    "description": "Automatic test to tell computers and humans apart",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Kruglov Sergey",
+            "email": "kruglov@yandex.ru",
+            "homepage": "http://www.kruglov.ru/"
+        },
+        {
+            "name": "ganlv",
+            "email": "ganlvtech@qq.com",
+            "homepage": "https://github.com/ganlvtech"
+        },
+        {
+            "name": "Karel Wintersky",
+            "email": "karel.wintersky@yandex.ru"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "AJUR\\Template\\": "src/"
+        }
+    },
+    "require": {
+        "php": "^7.4 | 8.*",
+        "ext-gd": "*"
+    },
+    "require-dev": {
+        "rector/rector": "^0.19.8",
+        "phpunit/phpunit": "^4.0"
+    }
+
+}
