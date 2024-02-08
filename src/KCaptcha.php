@@ -338,7 +338,7 @@ class KCaptcha implements KCaptchaInterface
      *
      * @return void
      */
-    public function display():void
+    public function display($type = null):void
     {
         $image = $this->getImageResource();
 
@@ -347,13 +347,9 @@ class KCaptcha implements KCaptchaInterface
         header('Cache-Control: post-check=0, pre-check=0', false);
         header('Pragma: no-cache');
 
-        switch ($this->imageType) {
-            case 'jpg':
-            case 'jpeg': {
-                header("Content-Type: image/jpeg");
-                imagejpeg($image, null, $this->jpeg_quality);
-                break;
-            }
+        $outType = !is_null($type) ? $type : $this->imageType;
+
+        switch ($outType) {
             case 'gif': {
                 header("Content-Type: image/gif");
                 imagegif($image);
@@ -362,6 +358,11 @@ class KCaptcha implements KCaptchaInterface
             case 'png': {
                 header("Content-Type: image/x-png");
                 imagepng($image, $this->png_quality);
+                break;
+            }
+            default: {
+                header("Content-Type: image/jpeg");
+                imagejpeg($image, null, $this->jpeg_quality);
                 break;
             }
         }

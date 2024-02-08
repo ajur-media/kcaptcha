@@ -10,4 +10,6 @@ makefile            export-ignore
 phpunit.xml         export-ignore
 phpunit.xml.dist    export-ignore
 test*.*             export-ignore
-vendor              example
+vendor              export-ignore
+example             export-ignore
+
