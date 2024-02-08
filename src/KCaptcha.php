@@ -3,12 +3,14 @@
 namespace AJUR\Template;
 
 /**
- * KCAPTCHA PROJECT VERSION 2.1
+ * KCAPTCHA PROJECT
  *
  * Automatic test to tell computers and humans apart
  */
 class KCaptcha implements KCaptchaInterface
 {
+    private $timing = [];
+
     /**
      * @var string
      */
@@ -41,6 +43,11 @@ class KCaptcha implements KCaptchaInterface
      * @var int
      */
     private $height = 80;
+
+    /**
+     * @var int
+     */
+    private $length = 5;
 
     /**
      * symbol's vertical fluctuation amplitude
@@ -81,7 +88,7 @@ class KCaptcha implements KCaptchaInterface
     /**
      * @var false|\GdImage|resource
      */
-    private $img;
+    private $image_resource;
 
     /**
      * @var string
@@ -89,13 +96,42 @@ class KCaptcha implements KCaptchaInterface
     private $imageType = 'jpeg';
 
     /**
+     * FONTS
+     */
+    /**
+     * Доступные шрифтовые файлы
+     * @var array
+     */
+    private $available_font_files = [];
+
+    /**
+     * @var array Загруженные шрифты (width, height, metrics)
+     */
+    private $fonts = [];
+
+    /**
+     * Количество загруженных шрифтов
+     *
+     * @var int
+     */
+    private $fonts_count = 0;
+
+    /**
+     * @var bool
+     */
+    private $use_distortion = true;
+
+
+    /**
      *
      * @param array $config
      */
     public function __construct(array $config = [])
     {
+        $this->timing['current'] = microtime(true);
+        
         # CAPTCHA string length
-        $length = \mt_rand(5, 7); # random 5 or 6 or 7
+        $this->length = \mt_rand(5, 7); # random 5 or 6 or 7
 
         # CAPTCHA image colors (RGB, 0-255)
         //$this->foreground_color = array(0, 0, 0);
@@ -112,13 +148,14 @@ class KCaptcha implements KCaptchaInterface
         );
 
         $configurable_options = [
+            'length',
             'width', 'height',
             'fluctuation_amplitude',
             'white_noise_density',
             'black_noise_density',
+            'use_distortion',
             'no_spaces',
             'show_credits', 'credits',
-            'length',
             'foreground_color', 'background_color',
             'jpeg_quality', 'png_quality'
         ];
@@ -136,16 +173,17 @@ class KCaptcha implements KCaptchaInterface
         $this->jpeg_quality = self::toRange($this->jpeg_quality, 1, 100);
         $this->png_quality = self::toRange($this->png_quality, -1, 9);
 
-        // instead of scandir + readdir + pregmatch
-        $fonts = \glob(__DIR__ . '/' . $this->fontsdir . '/*.png');
+        $this->timing['init'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
 
-        $alphabet_length = \strlen($this->alphabet);
+        $this->loadFonts();
+
+        $this->timing['loadfonts'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
 
         do {
             // generating random keystring
             while (true) {
                 $this->keystring = '';
-                for ($i = 0; $i < $length; $i++) {
+                for ($i = 0; $i < $this->length; $i++) {
                     $this->keystring .= $this->allowed_symbols[ \mt_rand(0, strlen($this->allowed_symbols) - 1) ];
                 }
                 if (!\preg_match('/cp|cb|ck|c6|c9|rn|rm|mm|co|do|cl|db|qp|qb|dp|ww/', $this->keystring)) {
@@ -153,41 +191,18 @@ class KCaptcha implements KCaptchaInterface
                 }
             }
 
-            $font_file = $fonts[ \mt_rand(0, count($fonts) - 1) ];
-            $font = \imagecreatefrompng($font_file);
-            \imagealphablending($font, true);
+            $current_font_id = mt_rand(0, $this->fonts_count - 1);
+            $current_font = $this->fonts[ $current_font_id ];
+            $font_metrics = $current_font['metrics'];
+            $fontfile_height = $current_font['height'];
+            $font = $current_font['resource'];
 
-            $fontfile_width = \imagesx($font);
-            $fontfile_height = \imagesy($font) - 1;
+            $image_with_text_and_noise = \imagecreatetruecolor($this->width, $this->height);
+            \imagealphablending($image_with_text_and_noise, true);
+            $white = \imagecolorallocate($image_with_text_and_noise, 255, 255, 255);
+            $black = \imagecolorallocate($image_with_text_and_noise, 0, 0, 0);
 
-            $font_metrics = array();
-            $symbol = 0;
-            $reading_symbol = false;
-
-            // loading font
-            for ($i = 0; $i < $fontfile_width && $symbol < $alphabet_length; $i++) {
-                $transparent = (\imagecolorat($font, $i, 0) >> 24) == 127;
-
-                if (!$reading_symbol && !$transparent) {
-                    $font_metrics[$this->alphabet[$symbol]] = array('start' => $i);
-                    $reading_symbol = true;
-                    continue;
-                }
-
-                if ($reading_symbol && $transparent) {
-                    $font_metrics[$this->alphabet[$symbol]]['end'] = $i;
-                    $reading_symbol = false;
-                    $symbol++;
-                    continue;
-                }
-            }
-
-            $img = \imagecreatetruecolor($this->width, $this->height);
-            \imagealphablending($img, true);
-            $white = \imagecolorallocate($img, 255, 255, 255);
-            $black = \imagecolorallocate($img, 0, 0, 0);
-
-            \imagefilledrectangle($img, 0, 0, $this->width - 1, $this->height - 1, $white);
+            \imagefilledrectangle($image_with_text_and_noise, 0, 0, $this->width - 1, $this->height - 1, $white);
 
             // draw text
             $x = 1;
@@ -195,11 +210,12 @@ class KCaptcha implements KCaptchaInterface
             if ($odd == 0) {
                 $odd = -1;
             }
-            for ($i = 0; $i < $length; $i++) {
-                $m = $font_metrics[$this->keystring[$i]];
+
+            for ($i = 0; $i < $this->length; $i++) {
+                $m = $font_metrics[$this->keystring[$i]]; // метрики нужной буквы шрифта
 
                 $y = (($i % 2) * $this->fluctuation_amplitude - $this->fluctuation_amplitude / 2) * $odd
-                    + \mt_rand(-\round($this->fluctuation_amplitude / 3), \round($this->fluctuation_amplitude / 3))
+                    + \mt_rand(-\number_format($this->fluctuation_amplitude / 3), \number_format($this->fluctuation_amplitude / 3))
                     + ($this->height - $fontfile_height) / 2;
 
                 if ($this->no_spaces) {
@@ -217,7 +233,7 @@ class KCaptcha implements KCaptchaInterface
                                         break;
                                     }
                                     for ($px = \min($left, $this->width - 1); $px > $left - 200 && $px >= 0; $px -= 1) {
-                                        $color = \imagecolorat($img, $px, $py) & 0xff;
+                                        $color = \imagecolorat($image_with_text_and_noise, $px, $py) & 0xff;
                                         if ($color + $opacity < 170) { // 170 - threshold
                                             if ($shift > $left - $px) {
                                                 $shift = $left - $px;
@@ -237,105 +253,132 @@ class KCaptcha implements KCaptchaInterface
                 } else {
                     $shift = 1;
                 }
-                \imagecopy($img, $font, $x - $shift, $y, $m['start'], 1, $m['end'] - $m['start'], $fontfile_height);
+                // копируем букву из ресурса шрифта на изображение
+                \imagecopy($image_with_text_and_noise, $font, $x - $shift, $y, $m['start'], 1, $m['end'] - $m['start'], $fontfile_height);
                 $x += $m['end'] - $m['start'] - $shift;
             }
         } while ($x >= $this->width - 10); // while not fit in canvas
 
-        //noise
-        $white = \imagecolorallocate($font, 255, 255, 255);
-        $black = \imagecolorallocate($font, 0, 0, 0);
-        for ($i = 0; $i < (($this->height - 30) * $x) * $this->white_noise_density; $i++) {
-            \imagesetpixel($img, \mt_rand(0, $x - 1), \mt_rand(10, $this->height - 15), $white);
+        $this->timing['copy_letters'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+
+        if ($this->white_noise_density > 0) {
+            $white = \imagecolorallocate($font, 255, 255, 255);
+            for ($i = 0; $i < (($this->height - 30) * $x) * $this->white_noise_density; $i++) {
+                \imagesetpixel($image_with_text_and_noise, \mt_rand(0, $x - 1), \mt_rand(10, $this->height - 15), $white);
+            }
         }
-        for ($i = 0; $i < (($this->height - 30) * $x) * $this->black_noise_density; $i++) {
-            \imagesetpixel($img, \mt_rand(0, $x - 1), \mt_rand(10, $this->height - 15), $black);
+
+        $this->timing['white_noise'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+
+        if ($this->black_noise_density > 0) {
+            $black = \imagecolorallocate($font, 0, 0, 0);
+            for ($i = 0; $i < (($this->height - 30) * $x) * $this->black_noise_density; $i++) {
+                \imagesetpixel($image_with_text_and_noise, \mt_rand(0, $x - 1), \mt_rand(10, $this->height - 15), $black);
+            }
         }
+        $this->timing['black_noise'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
 
         $center = $x / 2;
 
-        // credits. To remove, see configuration file
+        // create final image
+
         $image = imagecreatetruecolor($this->width, $this->height + ($this->show_credits ? 12 : 0));
         $foreground = imagecolorallocate($image, $this->foreground_color[0], $this->foreground_color[1], $this->foreground_color[2]);
         $background = imagecolorallocate($image, $this->background_color[0], $this->background_color[1], $this->background_color[2]);
         imagefilledrectangle($image, 0, 0, $this->width - 1, $this->height - 1, $background);
-        imagefilledrectangle($image, 0, $this->height, $this->width - 1, $this->height + 12, $foreground);
-        $credits = empty($this->credits) ? $_SERVER['HTTP_HOST'] : $this->credits;
-        imagestring($image, 2, $this->width / 2 - imagefontwidth(2) * strlen($credits) / 2, $this->height - 2, $credits, $background);
 
-        //@todo: call imagestring only if show_credits is set?
+        $this->timing['image2_ready'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
 
-        // periods
-        $rand1 = mt_rand(750000, 1200000) / 10000000;
-        $rand2 = mt_rand(750000, 1200000) / 10000000;
-        $rand3 = mt_rand(750000, 1200000) / 10000000;
-        $rand4 = mt_rand(750000, 1200000) / 10000000;
-        // phases
-        $rand5 = mt_rand(0, 31415926) / 10000000;
-        $rand6 = mt_rand(0, 31415926) / 10000000;
-        $rand7 = mt_rand(0, 31415926) / 10000000;
-        $rand8 = mt_rand(0, 31415926) / 10000000;
-        // amplitudes
-        $rand9 = mt_rand(330, 420) / 110;
-        $rand10 = mt_rand(330, 450) / 100;
-
-        //wave distortion
-
-        for ($x = 0; $x < $this->width; $x++) {
-            for ($y = 0; $y < $this->height; $y++) {
-                $sx = $x + (\sin($x * $rand1 + $rand5) + \sin($y * $rand3 + $rand6)) * $rand9 - $this->width / 2 + $center + 1;
-                $sy = $y + (\sin($x * $rand2 + $rand7) + \sin($y * $rand4 + $rand8)) * $rand10;
-
-                if ($sx < 0 || $sy < 0 || $sx >= $this->width - 1 || $sy >= $this->height - 1) {
-                    continue;
-                } else {
-                    $color = \imagecolorat($img, $sx, $sy) & 0xFF;
-                    $color_x = \imagecolorat($img, $sx + 1, $sy) & 0xFF;
-                    $color_y = \imagecolorat($img, $sx, $sy + 1) & 0xFF;
-                    $color_xy = \imagecolorat($img, $sx + 1, $sy + 1) & 0xFF;
-                }
-
-                if ($color == 255 && $color_x == 255 && $color_y == 255 && $color_xy == 255) {
-                    continue;
-                } else {
-                    if ($color == 0 && $color_x == 0 && $color_y == 0 && $color_xy == 0) {
-                        $newred = $this->foreground_color[0];
-                        $newgreen = $this->foreground_color[1];
-                        $newblue = $this->foreground_color[2];
-                    } else {
-                        $frsx = $sx - floor($sx);
-                        $frsy = $sy - floor($sy);
-                        $frsx1 = 1 - $frsx;
-                        $frsy1 = 1 - $frsy;
-
-                        $newcolor = (
-                            $color * $frsx1 * $frsy1 +
-                            $color_x * $frsx * $frsy1 +
-                            $color_y * $frsx1 * $frsy +
-                            $color_xy * $frsx * $frsy);
-
-                        if ($newcolor > 255) {
-                            $newcolor = 255;
-                        }
-                        $newcolor = $newcolor / 255;
-                        $newcolor0 = 1 - $newcolor;
-
-                        $newred = $newcolor0 * $this->foreground_color[0] + $newcolor * $this->background_color[0];
-                        $newgreen = $newcolor0 * $this->foreground_color[1] + $newcolor * $this->background_color[1];
-                        $newblue = $newcolor0 * $this->foreground_color[2] + $newcolor * $this->background_color[2];
-                    }
-                }
-
-                \imagesetpixel($image, $x, $y, \imagecolorallocate($image, $newred, $newgreen, $newblue));
-            }
+        // credits. To remove, see configuration file
+        if ($this->show_credits) {
+            imagefilledrectangle($image, 0, $this->height, $this->width - 1, $this->height + 12, $foreground);
+            $credits = empty($this->credits) ? $_SERVER['HTTP_HOST'] : $this->credits;
+            imagestring($image, 2, $this->width / 2 - imagefontwidth(2) * strlen($credits) / 2, $this->height - 2, $credits, $background);
         }
 
-        $this->img = $image;
+        $this->timing['credits'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+
+        //wave distortion
+        $this->timing['before_distortion'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+
+        if ($this->use_distortion) {
+            // periods
+            $period_rand1 = mt_rand(750000, 1200000) / 10000000;
+            $period_rand2 = mt_rand(750000, 1200000) / 10000000;
+            $period_rand3 = mt_rand(750000, 1200000) / 10000000;
+            $period_rand4 = mt_rand(750000, 1200000) / 10000000;
+
+            // phases
+            $phase_rand5 = mt_rand(0, 31415926) / 10000000;
+            $phase_rand6 = mt_rand(0, 31415926) / 10000000;
+            $phase_rand7 = mt_rand(0, 31415926) / 10000000;
+            $phase_rand8 = mt_rand(0, 31415926) / 10000000;
+
+            // amplitudes
+            $amplitude_rand9 = mt_rand(330, 420) / 110;
+            $ampliture_rand10 = mt_rand(330, 450) / 100;
+
+            for ($x = 0; $x < $this->width; $x++) {
+                for ($y = 0; $y < $this->height; $y++) {
+                    $sx = $x + (\sin($x * $period_rand1 + $phase_rand5) + \sin($y * $period_rand3 + $phase_rand6)) * $amplitude_rand9 - $this->width / 2 + $center + 1;
+                    $sy = $y + (\sin($x * $period_rand2 + $phase_rand7) + \sin($y * $period_rand4 + $phase_rand8)) * $ampliture_rand10;
+
+                    if ($sx < 0 || $sy < 0 || $sx >= $this->width - 1 || $sy >= $this->height - 1) {
+                        continue;
+                    } else {
+                        $color = \imagecolorat($image_with_text_and_noise, $sx, $sy) & 0xFF;
+                        $color_x = \imagecolorat($image_with_text_and_noise, $sx + 1, $sy) & 0xFF;
+                        $color_y = \imagecolorat($image_with_text_and_noise, $sx, $sy + 1) & 0xFF;
+                        $color_xy = \imagecolorat($image_with_text_and_noise, $sx + 1, $sy + 1) & 0xFF;
+                    }
+
+                    if ($color == 255 && $color_x == 255 && $color_y == 255 && $color_xy == 255) {
+                        continue;
+                    } else {
+                        if ($color == 0 && $color_x == 0 && $color_y == 0 && $color_xy == 0) {
+                            $newred = $this->foreground_color[0];
+                            $newgreen = $this->foreground_color[1];
+                            $newblue = $this->foreground_color[2];
+                        } else {
+                            $frsx = $sx - floor($sx);
+                            $frsy = $sy - floor($sy);
+                            $frsx1 = 1 - $frsx;
+                            $frsy1 = 1 - $frsy;
+
+                            $newcolor = (
+                                $color * $frsx1 * $frsy1 +
+                                $color_x * $frsx * $frsy1 +
+                                $color_y * $frsx1 * $frsy +
+                                $color_xy * $frsx * $frsy);
+
+                            if ($newcolor > 255) {
+                                $newcolor = 255;
+                            }
+                            $newcolor = $newcolor / 255;
+                            $newcolor0 = 1 - $newcolor;
+
+                            $newred = $newcolor0 * $this->foreground_color[0] + $newcolor * $this->background_color[0];
+                            $newgreen = $newcolor0 * $this->foreground_color[1] + $newcolor * $this->background_color[1];
+                            $newblue = $newcolor0 * $this->foreground_color[2] + $newcolor * $this->background_color[2];
+                        }
+                    }
+
+                    \imagesetpixel($image, $x, $y, \imagecolorallocate($image, $newred, $newgreen, $newblue));
+                }
+            }
+        } else {
+            imagecopy($image, $image_with_text_and_noise, 0, 0, 0, 0, $this->width, $this->height);
+        }
+
+        $this->timing['after_distortion'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+
+        $this->image_resource = $image;
     }
 
     /**
      * Display captcha
      *
+     * @param null $type
      * @return void
      */
     public function display($type = null):void
@@ -366,6 +409,10 @@ class KCaptcha implements KCaptchaInterface
                 break;
             }
         }
+
+        /*$f = fopen("test.txt", "a+");
+        fwrite($f, var_export($this->timing, true) . "\n\n");
+        fclose($f);*/
     }
 
     //
@@ -385,7 +432,7 @@ class KCaptcha implements KCaptchaInterface
      */
     public function &getImageResource()
     {
-        return $this->img;
+        return $this->image_resource;
     }
 
     /**
@@ -397,6 +444,57 @@ class KCaptcha implements KCaptchaInterface
     private static function toRange($value, $min, $max)
     {
         return \max($min, \min($value, $max));
+    }
+
+    /**
+     * Загружает шрифты
+     *
+     * @return void
+     */
+    private function loadFonts()
+    {
+        $available_font_files = \glob(__DIR__ . '/' . $this->fontsdir . '/*.png');
+
+        foreach ($available_font_files as $index => $font_file) {
+
+            $font = \imagecreatefrompng($font_file);
+            \imagealphablending($font, true);
+
+            $fontfile_width = \imagesx($font);
+            $fontfile_height = \imagesy($font) - 1;
+
+            $font_metrics = [];
+            $symbol = 0;
+            $reading_symbol = false;
+
+            $alphabet_length = \strlen($this->alphabet);
+
+            for ($i = 0; $i < $fontfile_width && $symbol < $alphabet_length; $i++) {
+                $transparent = (\imagecolorat($font, $i, 0) >> 24) == 127;
+
+                if (!$reading_symbol && !$transparent) {
+                    $font_metrics[$this->alphabet[$symbol]] = array('start' => $i);
+                    $reading_symbol = true;
+                    continue;
+                }
+
+                if ($reading_symbol && $transparent) {
+                    $font_metrics[$this->alphabet[$symbol]]['end'] = $i;
+                    $reading_symbol = false;
+                    $symbol++;
+                    continue;
+                }
+            }
+
+            $this->fonts[ $index ] = [
+                'resource'      =>  $font,
+                'width'         =>  $fontfile_width,
+                'height'        =>  $fontfile_height,
+                'metrics'       =>  $font_metrics
+            ];
+
+            $this->fonts_count++;
+        }
     }
 }
 
