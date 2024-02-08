@@ -124,7 +124,7 @@ class KCaptcha implements KCaptchaInterface
         ];
 
         foreach ($config as $key => $value) {
-            if (\array_key_exists($key, $configurable_options)) {
+            if (\in_array($key, $configurable_options)) {
                 $this->{$key} = $value;
             }
         }
