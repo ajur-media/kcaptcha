@@ -9,12 +9,12 @@ namespace AJUR\Template;
  */
 class KCaptcha implements KCaptchaInterface
 {
-    private $timing = [];
+    private array $timing = [];
 
     /**
      * @var string
      */
-    private $alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"; # do not change without changing font files!
+    private string $alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"; # do not change without changing font files!
 
     /**
      * symbols used to draw CAPTCHA
@@ -24,57 +24,91 @@ class KCaptcha implements KCaptchaInterface
      *
      * @var string
      */
-    private $allowed_symbols = "23456789abcdegikpqsvxyz"; #alphabet without similar symbols (o=0, 1=l, i=j, t=f)
+    private string $allowed_symbols = "23456789abcdegikpqsvxyz"; #alphabet without similar symbols (o=0, 1=l, i=j, t=f)
 
     /**
      * folder with fonts
      *
      * @var string
      */
-    private $fontsdir = 'fonts';
+    private string $fontsdir = 'fonts';
 
     // CAPTCHA image size (you do not need to change it, this parameters is optimal)
     /**
      * @var int
      */
-    private $width = 160;
+    private int $width = 160;
 
     /**
      * @var int
      */
-    private $height = 80;
+    private int $height = 80;
 
     /**
      * @var int
      */
-    private $length = 5;
+    private int $length = 5;
 
     /**
      * symbol's vertical fluctuation amplitude
      *
      * @var int
      */
-    private $fluctuation_amplitude = 8;
+    private int $fluctuation_amplitude = 8;
 
-    //Noise
-    //$white_noise_density=0; // no white noise
+    /**
+     * White noise density (0 - no)
+     *
+     * @var float|int
+     */
     private $white_noise_density = 1 / 6;
 
-    //$black_noise_density=0; // no black noise
+    /**
+     * Black noise density (0 - no)
+     *
+     * @var float|int
+     */
     private $black_noise_density = 1 / 30;
 
-    # increase safety by prevention of spaces between symbols
-    private $no_spaces = true;
+    /**
+     * increase safety by prevention of spaces between symbols
+     *
+     * @var bool
+     */
+    private bool $no_spaces = true;
 
-    # show credits
-    private $show_credits = false; # set to false to remove credits line. Credits adds 12 pixels to image height
-    private $credits = 'www.captcha.ru'; # if empty, HTTP_HOST will be shown
+    #
+    /**
+     * show credits
+     * set false to remove credits line. Credits string adds 12 pixels to image height
+     *
+     * @var bool
+     */
+    private bool $show_credits = false;
 
+    /**
+     * Credit string
+     * if empty, HTTP_HOST will be shown
+     *
+     * @var string
+     */
+    private string $credits = 'www.captcha.ru';
+
+    /**
+     * @var array
+     */
     private $foreground_color;
 
+    /**
+     * @var array
+     */
     private $background_color;
 
-    # JPEG quality of CAPTCHA image (bigger is better quality, but larger file size)
+    /**
+     * JPEG quality of CAPTCHA image (bigger is better quality, but larger file size)
+     *
+     * @var int
+     */
     private $jpeg_quality = 90;
 
     /**
@@ -82,7 +116,11 @@ class KCaptcha implements KCaptchaInterface
      */
     private $png_quality = -1;
 
-    // generates key string and image
+    /**
+     * generates key string and image
+     *
+     * @var string
+     */
     private string $keystring;
 
     /**
@@ -102,24 +140,24 @@ class KCaptcha implements KCaptchaInterface
      * Доступные шрифтовые файлы
      * @var array
      */
-    private $available_font_files = [];
+    private array $available_font_files = [];
 
     /**
      * @var array Загруженные шрифты (width, height, metrics)
      */
-    private $fonts = [];
+    private array $fonts = [];
 
     /**
      * Количество загруженных шрифтов
      *
      * @var int
      */
-    private $fonts_count = 0;
+    private int $fonts_count = 0;
 
     /**
      * @var bool
      */
-    private $use_distortion = true;
+    private bool $use_distortion = true;
 
 
     /**
@@ -128,7 +166,7 @@ class KCaptcha implements KCaptchaInterface
      */
     public function __construct(array $config = [])
     {
-        $this->timing['current'] = microtime(true);
+        $this->timing['current'] = \microtime(true);
         
         # CAPTCHA string length
         $this->length = \mt_rand(5, 7); # random 5 or 6 or 7
@@ -173,11 +211,13 @@ class KCaptcha implements KCaptchaInterface
         $this->jpeg_quality = self::toRange($this->jpeg_quality, 1, 100);
         $this->png_quality = self::toRange($this->png_quality, -1, 9);
 
-        $this->timing['init'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['init'] = \number_format(microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         $this->loadFonts();
 
-        $this->timing['loadfonts'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['loadfonts'] = \number_format(microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         do {
             // generating random keystring
@@ -191,7 +231,7 @@ class KCaptcha implements KCaptchaInterface
                 }
             }
 
-            $current_font_id = mt_rand(0, $this->fonts_count - 1);
+            $current_font_id = \mt_rand(0, $this->fonts_count - 1);
             $current_font = $this->fonts[ $current_font_id ];
             $font_metrics = $current_font['metrics'];
             $fontfile_height = $current_font['height'];
@@ -259,7 +299,8 @@ class KCaptcha implements KCaptchaInterface
             }
         } while ($x >= $this->width - 10); // while not fit in canvas
 
-        $this->timing['copy_letters'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['copy_letters'] = \number_format(microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         if ($this->white_noise_density > 0) {
             $white = \imagecolorallocate($font, 255, 255, 255);
@@ -268,7 +309,8 @@ class KCaptcha implements KCaptchaInterface
             }
         }
 
-        $this->timing['white_noise'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['white_noise'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         if ($this->black_noise_density > 0) {
             $black = \imagecolorallocate($font, 0, 0, 0);
@@ -276,47 +318,51 @@ class KCaptcha implements KCaptchaInterface
                 \imagesetpixel($image_with_text_and_noise, \mt_rand(0, $x - 1), \mt_rand(10, $this->height - 15), $black);
             }
         }
-        $this->timing['black_noise'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['black_noise'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         $center = $x / 2;
 
         // create final image
 
-        $image = imagecreatetruecolor($this->width, $this->height + ($this->show_credits ? 12 : 0));
-        $foreground = imagecolorallocate($image, $this->foreground_color[0], $this->foreground_color[1], $this->foreground_color[2]);
-        $background = imagecolorallocate($image, $this->background_color[0], $this->background_color[1], $this->background_color[2]);
-        imagefilledrectangle($image, 0, 0, $this->width - 1, $this->height - 1, $background);
+        $image = \imagecreatetruecolor($this->width, $this->height + ($this->show_credits ? 12 : 0));
+        $foreground = \imagecolorallocate($image, $this->foreground_color[0], $this->foreground_color[1], $this->foreground_color[2]);
+        $background = \imagecolorallocate($image, $this->background_color[0], $this->background_color[1], $this->background_color[2]);
+        \imagefilledrectangle($image, 0, 0, $this->width - 1, $this->height - 1, $background);
 
-        $this->timing['image2_ready'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['image2_ready'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         // credits. To remove, see configuration file
         if ($this->show_credits) {
-            imagefilledrectangle($image, 0, $this->height, $this->width - 1, $this->height + 12, $foreground);
+            \imagefilledrectangle($image, 0, $this->height, $this->width - 1, $this->height + 12, $foreground);
             $credits = empty($this->credits) ? $_SERVER['HTTP_HOST'] : $this->credits;
-            imagestring($image, 2, $this->width / 2 - imagefontwidth(2) * strlen($credits) / 2, $this->height - 2, $credits, $background);
+            \imagestring($image, 2, $this->width / 2 - \imagefontwidth(2) * \strlen($credits) / 2, $this->height - 2, $credits, $background);
         }
 
-        $this->timing['credits'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['credits'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         //wave distortion
-        $this->timing['before_distortion'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['before_distortion'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         if ($this->use_distortion) {
             // periods
-            $period_rand1 = mt_rand(750000, 1200000) / 10000000;
-            $period_rand2 = mt_rand(750000, 1200000) / 10000000;
-            $period_rand3 = mt_rand(750000, 1200000) / 10000000;
-            $period_rand4 = mt_rand(750000, 1200000) / 10000000;
+            $period_rand1 = \mt_rand(750000, 1200000) / 10000000;
+            $period_rand2 = \mt_rand(750000, 1200000) / 10000000;
+            $period_rand3 = \mt_rand(750000, 1200000) / 10000000;
+            $period_rand4 = \mt_rand(750000, 1200000) / 10000000;
 
             // phases
-            $phase_rand5 = mt_rand(0, 31415926) / 10000000;
-            $phase_rand6 = mt_rand(0, 31415926) / 10000000;
-            $phase_rand7 = mt_rand(0, 31415926) / 10000000;
-            $phase_rand8 = mt_rand(0, 31415926) / 10000000;
+            $phase_rand5 = \mt_rand(0, 31415926) / 10000000;
+            $phase_rand6 = \mt_rand(0, 31415926) / 10000000;
+            $phase_rand7 = \mt_rand(0, 31415926) / 10000000;
+            $phase_rand8 = \mt_rand(0, 31415926) / 10000000;
 
             // amplitudes
-            $amplitude_rand9 = mt_rand(330, 420) / 110;
-            $ampliture_rand10 = mt_rand(330, 450) / 100;
+            $amplitude_rand9 = \mt_rand(330, 420) / 110;
+            $ampliture_rand10 = \mt_rand(330, 450) / 100;
 
             for ($x = 0; $x < $this->width; $x++) {
                 for ($y = 0; $y < $this->height; $y++) {
@@ -367,10 +413,11 @@ class KCaptcha implements KCaptchaInterface
                 }
             }
         } else {
-            imagecopy($image, $image_with_text_and_noise, 0, 0, 0, 0, $this->width, $this->height);
+            \imagecopy($image, $image_with_text_and_noise, 0, 0, 0, 0, $this->width, $this->height);
         }
 
-        $this->timing['after_distortion'] = number_format(microtime(true) - $this->timing['current'], 5); $this->timing['current'] = microtime(true);
+        $this->timing['after_distortion'] = \number_format(\microtime(true) - $this->timing['current'], 5);
+        $this->timing['current'] = \microtime(true);
 
         $this->image_resource = $image;
     }
@@ -385,34 +432,34 @@ class KCaptcha implements KCaptchaInterface
     {
         $image = $this->getImageResource();
 
-        header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        header('Cache-Control: post-check=0, pre-check=0', false);
-        header('Pragma: no-cache');
+        \header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+        \header('Cache-Control: no-store, no-cache, must-revalidate');
+        \header('Cache-Control: post-check=0, pre-check=0', false);
+        \header('Pragma: no-cache');
 
         $outType = !is_null($type) ? $type : $this->imageType;
 
         switch ($outType) {
             case 'gif': {
-                header("Content-Type: image/gif");
-                imagegif($image);
+                \header("Content-Type: image/gif");
+                \imagegif($image);
                 break;
             }
             case 'png': {
-                header("Content-Type: image/x-png");
-                imagepng($image, $this->png_quality);
+                \header("Content-Type: image/x-png");
+                \imagepng($image, null, $this->png_quality);
                 break;
             }
+            case 'webp': {
+                \header("Content-Type: image/webp");
+                \imagewebp($image, null);
+            }
             default: {
-                header("Content-Type: image/jpeg");
-                imagejpeg($image, null, $this->jpeg_quality);
+                \header("Content-Type: image/jpeg");
+                \imagejpeg($image, null, $this->jpeg_quality);
                 break;
             }
         }
-
-        /*$f = fopen("test.txt", "a+");
-        fwrite($f, var_export($this->timing, true) . "\n\n");
-        fclose($f);*/
     }
 
     //
