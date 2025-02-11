@@ -159,6 +159,11 @@ class KCaptcha implements KCaptchaInterface
      */
     private bool $use_distortion = true;
 
+    /**
+     * Запрещенные комбинации символов в строке. Запрещенные, поскольку сливаются и малоотличимы друг от друга.
+     * @var string
+     */
+    private string $key_string_forbidden_symbols = '/cp|cb|ck|c6|c9|rn|rm|mm|co|do|cl|db|qp|qb|dp|ww/';
 
     /**
      *
@@ -426,9 +431,10 @@ class KCaptcha implements KCaptchaInterface
      * Display captcha
      *
      * @param null $type
+     * @param null $file
      * @return void
      */
-    public function display($type = null):void
+    public function display($type = null, $file = null):void
     {
         $image = $this->getImageResource();
 
@@ -441,22 +447,30 @@ class KCaptcha implements KCaptchaInterface
 
         switch ($outType) {
             case 'gif': {
-                \header("Content-Type: image/gif");
-                \imagegif($image);
+                if (is_null($file)) {
+                    \header("Content-Type: image/gif");
+                }
+                \imagegif($image, $file);
                 break;
             }
             case 'png': {
-                \header("Content-Type: image/x-png");
-                \imagepng($image, null, $this->png_quality);
+                if (is_null($file)) {
+                    \header("Content-Type: image/x-png");
+                }
+                \imagepng($image, $file, $this->png_quality);
                 break;
             }
             case 'webp': {
-                \header("Content-Type: image/webp");
-                \imagewebp($image, null);
+                if (is_null($file)) {
+                    \header("Content-Type: image/webp");
+                }
+                \imagewebp($image, $file);
             }
             default: {
-                \header("Content-Type: image/jpeg");
-                \imagejpeg($image, null, $this->jpeg_quality);
+                if (is_null($file)) {
+                    \header("Content-Type: image/jpeg");
+                }
+                \imagejpeg($image, $file, $this->jpeg_quality);
                 break;
             }
         }
